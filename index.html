@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Planner</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font: 16px system-ui, sans-serif;
+      color: #17212f;
+      background: #f3f6fa;
+    }
+    main { max-width: 1100px; margin: auto; }
+    h1 { margin-top: 0; }
+    form, .column {
+      padding: 18px;
+      border-radius: 12px;
+      background: white;
+      box-shadow: 0 2px 12px #17212f12;
+    }
+    form { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
+    input, button, select { font: inherit; padding: 10px; }
+    input { flex: 1 1 250px; min-width: 0; }
+    button { cursor: pointer; border: 0; border-radius: 6px; }
+    form button { color: white; background: #2459a6; }
+    .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .column { min-height: 220px; }
+    .column h2 { margin-top: 0; font-size: 18px; }
+    .task {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid #dce3ed;
+      border-radius: 8px;
+    }
+    .task strong { display: block; overflow-wrap: anywhere; }
+    .task p { margin: 6px 0 12px; color: #586575; }
+    .task-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    .task-controls select { flex: 1; min-width: 130px; }
+    .delete { color: #a02020; background: #ffeded; }
+    #message { min-height: 1.5em; color: #a02020; }
+    @media (max-width: 700px) {
+      .board { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>My Planner</h1>
+    <form id="task-form">
+      <input id="task-title" aria-label="Task title" placeholder="New task" required maxlength="200">
+      <input id="task-notes" aria-label="Task notes" placeholder="Notes (optional)" maxlength="500">
+      <button type="submit">Add task</button>
+    </form>
+    <p id="message" role="alert"></p>
+
+    <div class="board">
+      <section class="column" aria-labelledby="todo-heading">
+        <h2 id="todo-heading">To do</h2>
+        <div id="todo"></div>
+      </section>
+      <section class="column" aria-labelledby="doing-heading">
+        <h2 id="doing-heading">In progress</h2>
+        <div id="doing"></div>
+      </section>
+      <section class="column" aria-labelledby="done-heading">
+        <h2 id="done-heading">Done</h2>
+        <div id="done"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const storageKey = "my-planner-tasks";
+    const statuses = [
+      ["todo", "To do"],
+      ["doing", "In progress"],
+      ["done", "Done"]
+    ];
+    const message = document.getElementById("message");
+    let tasks;
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      if (!Array.isArray(saved)) throw new Error("Invalid saved tasks");
+      tasks = saved;
+    } catch (error) {
+      tasks = [];
+      message.textContent =
+        "Saved tasks could not be read. Changes are disabled to protect that data.";
+      document.querySelectorAll("#task-form input, #task-form button")
+        .forEach(element => element.disabled = true);
+    }
+
+    function save(updatedTasks) {
+      if (document.getElementById("task-title").disabled) return false;
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updatedTasks));
+        tasks = updatedTasks;
+        message.textContent = "";
+        render();
+        return true;
+      } catch (error) {
+        message.textContent =
+          "Could not save this change. Check that browser storage is enabled and has space.";
+        return false;
+      }
+    }
+
+    function render() {
+      for (const [status] of statuses) {
+        document.getElementById(status).replaceChildren();
+      }
+
+      for (const task of tasks) {
+        if (!statuses.some(([status]) => status === task.status)) continue;
+
+        const card = document.createElement("article");
+        card.className = "task";
+
+        const title = document.createElement("strong");
+        title.textContent = task.title;
+        card.append(title);
+
+        if (task.notes) {
+          const notes = document.createElement("p");
+          notes.textContent = task.notes;
+          card.append(notes);
+        }
+
+        const controls = document.createElement("div");
+        controls.className = "task-controls";
+
+        const select = document.createElement("select");
+        select.setAttribute("aria-label", `Status for ${task.title}`);
+        for (const [value, label] of statuses) {
+          select.add(new Option(label, value));
+        }
+        select.value = task.status;
+        select.addEventListener("change", () => {
+          const updated = tasks.map(item =>
+            item.id === task.id ? { ...item, status: select.value } : item
+          );
+          if (!save(updated)) select.value = task.status;
+        });
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "delete";
+        remove.textContent = "Delete";
+        remove.setAttribute("aria-label", `Delete ${task.title}`);
+        remove.addEventListener("click", () => {
+          save(tasks.filter(item => item.id !== task.id));
+        });
+
+        controls.append(select, remove);
+        card.append(controls);
+        document.getElementById(task.status).append(card);
+      }
+    }
+
+    document.getElementById("task-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const title = document.getElementById("task-title").value.trim();
+      const notes = document.getElementById("task-notes").value.trim();
+      if (!title) return;
+
+      if (save([...tasks, { id: crypto.randomUUID(), title, notes, status: "todo" }])) {
+        event.target.reset();
+        document.getElementById("task-title").focus();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
